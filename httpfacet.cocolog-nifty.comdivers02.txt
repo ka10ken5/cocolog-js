@@ -1,0 +1,778 @@
+/*  http://facet.cocolog-nifty.com/divers/foldSidebar02c.js
+ *  made by facet
+ *          http://facet.cocolog-nifty.com/divers/
+ *
+ *  this ver. 02c26   @ 2008-05-18 + FS2.USE_COOKIE
+ *            02c09   @ 2006-03-11 useTitleButton //patched by furyu (*)
+ *            02c00   @ 2004-09-28
+ *  original  02a     @ 2004-03-14
+ *
+ *  (*) patched by furyu to ver.02c08
+ *          http://furyu.tea-nifty.com/annex/2006/03/post_ee95.html
+ */
+
+// ---- user variables ----
+
+var foldMark = "-";
+var foldTitle = "close";
+var unfoldMark = "+";
+var unfoldTitle = "open";
+
+var switchStyle = "";   // deprecated?
+var labelStyle  = "";   // deprecated?
+
+var foldBroadly = true;  // deprecated
+
+var counterPrefix = "(";
+var counterPostfix = ")";
+var counterStyle = "letter-spacing:normal;";  // deprecated?
+
+var countBroadly = true; // deprecated
+
+var useHeadingAsSwitch = true;  //+ 2006-03-11 by furyu (renamed by facet from useTitleButton)
+
+var scopeIds = new Array("left", "right");  // since TypePad v1.6
+
+var pattern = ".";
+
+// ---- from prototype.js
+
+if (!Array.prototype.push) {
+  Array.prototype.push = function() {
+    var startLength = this.length;
+    for (var i = 0; i < arguments.length; i++)
+      this[startLength + i] = arguments[i];
+    return this.length;
+  }
+}
+
+// ----
+
+var FS2 = {
+
+  // module-header class added for TypePad v1.6+
+  FOLDED_CLASS   : "folded module-header"
+  ,
+  UNFOLDED_CLASS : "unfolded module-header"
+  
+  ,
+  USE_COOKIE : true //+ 2008-05-17
+  
+  ,
+  hasSwitch : function(head) {
+    
+    return (head.className &&
+           (head.className == FS2.FOLDED_CLASS ||
+            head.className == FS2.UNFOLDED_CLASS));
+    
+  } // hasSwitch
+
+  ,
+  handleClickOnFoldSwitch : function(evt) { //+ 2006-03-21
+    
+    evt = evt || window.event;
+    if (!evt)
+      return false;
+    
+    var node = evt.target || evt.srcElement;
+    if (!node)
+      return false;
+    
+    if (node.tagName && node.tagName.toUpperCase() == "A") {
+      if (useHeadingAsSwitch && node.href) {
+        location.href = node.href;
+        return false;
+      }
+    }
+    FS2.switchMode(_getHeading(node));
+    
+	return true;
+    
+    function _getHeading(n) {
+      
+      while (n != document) {
+        if (n.nodeType == 1 && n.tagName == "H2")
+          return n;
+        n = n.parentNode;
+      }
+      return null;
+      
+    } // function _getHeading
+    
+  } // handleClickOnFoldSwitch
+
+  ,
+  getGivenPattern : function(p){
+    
+    p = p.replace(/\|/g, 'DUMMYBRVBAR');
+    return FS2.escapeRegExpChars(p).replace(/DUMMYBRVBAR/g, '|');
+    
+  } // getGivenPattern
+
+  ,
+  getFoldPattern : function(p){
+    
+    var R = new Array();
+    var keys = p.split('|');
+    for (var i = 0, key; key = keys[i]; i++){
+      if (key.indexOf('!') != 0)
+        R.push(key);
+    }
+    if (R.length == 0)
+      return null;
+    
+    return R.join('|');
+    
+  } // getFoldPattern
+
+  ,
+  getUnfoldPattern : function(p){
+    
+    var R = new Array();
+    var keys = p.split('|');
+    for (var i = 0, key; key = keys[i]; i++){
+      if (key.indexOf('!') == 0)
+        R.push(key.substring(1));
+    }
+    if (R.length == 0)
+      return null;
+    
+    return R.join('|');
+    
+  } // getUnfoldPattern
+
+  ,
+  getUnfoldPatternRegExp : function(p){
+    
+    return new RegExp(FS2.getUnfoldPattern(p), 'i');
+    
+  } // getUnfoldPatternRegExp
+
+  ,
+  isCommentNode : function(e){
+    
+    if (!e)
+      return false;
+    
+    return (e.nodeType == 8);
+    
+  } // isCommentNode
+
+  ,
+  switchMode : function(head, action) {
+
+    if (!head)
+      return;
+    
+    var ul = FS2.getNextElement(head);
+    if (!ul)
+      return;
+    
+    var oldDispMode = ul.style.display || "";
+    var newDispMode = (oldDispMode == "none") ? "" : "none";
+    if (action)
+      newDispMode = (action == 'fold') ? 'none' : '';
+    
+    // switch style.display
+    var e = ul;
+    while (e) {
+      if (!e || !e.nodeName || e.tagName && e.tagName.toUpperCase() == "H2")
+         break;
+      if (FS2.hasClassName(e, "module"))
+         break;
+      e.style.display = newDispMode;
+      //if (!foldBroadly) break;  // no use since TP v1.5
+      
+      e = FS2.getNextElement(e);
+    }
+    
+    // switch mark
+    var button = FS2.getElementByTagAndClass(head, "button", "switch");
+    if (button)
+      button.innerHTML = (newDispMode == "none") ? unfoldMark : foldMark;
+    
+    // switch attributes
+    var switchElement = head;
+    if (button && !useHeadingAsSwitch)
+      switchElement = button;
+    switchElement.title = (newDispMode == "none") ? unfoldTitle : foldTitle;
+    
+    head.className = (newDispMode == "none") ? FS2.FOLDED_CLASS : FS2.UNFOLDED_CLASS;
+    
+    // handle cookie
+    if (FS2.USE_COOKIE) {
+		var headText = FS2.getModuleHeadText(head);
+		_setCookiePattern(headText, head.className);
+	}
+	
+    // end of switchMode
+    return true;
+	
+    function _setCookiePattern(headText, newClass) {
+      if (!headText) return;
+      var t = FS2.escapeRegExpChars(headText);
+      var p = FS2.getCookiedPattern();
+      if (!p) {
+        if (newClass != FS2.FOLDED_CLASS)
+          t = '!' + t;
+        p = t;
+      } else {
+        var keys = p.split('|');
+        var matched = false;
+        for (var i = 0, key; (key = keys[i]); i++){
+          if (key.replace('!', '') == t) {
+            if (key.charAt(0) == '!' && newClass == FS2.FOLDED_CLASS)
+              keys[i] = key.replace('!', '');
+            if (key.charAt(0) != '!' && newClass != FS2.FOLDED_CLASS)
+              keys[i] = '!' + key;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          if (newClass != FS2.FOLDED_CLASS)
+            t = '!' + t;
+          keys.push(t);
+        }
+        p = keys.join('|');
+      }
+      FS2.setCookiePattern(p);
+      
+    } // function _setCookiePattern
+    
+  } // switchMode
+
+  ,
+  hasClassName : function(e, givenClassName) {
+    if (!e.className) return false;
+    var klasses = e.className.split(" ");
+    for (var i = 0, klass; klass = klasses[i]; i++) {
+      if (klass == givenClassName)
+        return true;
+    }
+    return false;
+    
+  } // hasClassName
+
+  ,
+  getModuleHeadText : function(head) {
+    
+    var label = FS2.getSwitchLabel(head);
+    if (label)
+      return FS2.getTextContent(label);
+    else 
+      return FS2.getTextContent(head);
+    
+  } // getModuleHeadText
+
+  ,
+  getElementByTagAndClass : function(elem, tag, klass){
+    
+    if (!elem)
+      return null;
+    
+    var E = elem.getElementsByTagName(tag);
+    for (var i = 0, e; e = E[i]; i++){
+        if (e.className == klass) return e;
+    }
+    
+    return null;
+    
+  } // getElementByTagAndClass
+
+  ,
+  getSwitchLabel : function(head) {
+    
+    return FS2.getElementByTagAndClass(head, "label", "switch-label");
+    
+  } // getSwitchLabel
+  
+  ,
+  getSwitchButton : function(head) {
+    
+    return FS2.getElementByTagAndClass(head, "button", "switch");
+    
+  } // getSwitchButton
+    
+  ,
+  escapeRegExpChars : function(t){
+    
+    t = t.replace(/\\/g, '.');
+    t = t.replace(/\[/g, '.');
+    t = t.replace(/\]/g, '.');
+    t = t.replace(new RegExp('[-~`@$%^*()_+=|{}:"<>,?/\'!]', 'g'), '.');
+    return t;
+    
+  } // escapeRegExpChars
+
+  ,
+  setCookiePattern : function(p){
+    
+    FS2.createCookie('pattern2FoldSidebar', escape(p), 30);
+    
+  } // setCookiePattern
+
+  ,
+  getCookiedPattern : function(){
+    
+    return unescape(FS2.readCookie('pattern2FoldSidebar'));
+    
+  } // getCookiedPattern
+
+
+  // The functions createCookie() & readCookie() below are originaly from:
+  // http://yujiro.dyndns.org/blog/koikikukan/archives/2004/09/13-235641.php
+
+  ,
+  createCookie : function(name, value, days) {
+    
+    if (days) {
+      var date = new Date();
+      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+      var expires = ";expires=" + date.toGMTString();
+    } else {
+      expires = "";
+    }
+    document.cookie = name + "=" + value + expires + "; path=/";
+    
+  } // createCookie
+
+  ,
+  readCookie : function(name) {
+    
+    var nameEQ = name + "=";
+    var cs = document.cookie.split(';');
+    for(var i = 0, c; c = cs[i]; i++) {
+      while (c.charAt(0) == ' ')
+        c = c.substring(1,c.length);
+      if (c.indexOf(nameEQ) == 0)
+        return c.substring(nameEQ.length, c.length);
+    }
+    return "";
+    
+  } // readCookie
+
+
+  // The function eraseCookie(name) below is originaly from:
+  // http://www.quirksmode.org/js/cookies.html
+
+  ,
+  eraseCookie : function(name) {
+
+    FS2.createCookie(name, "", -1);
+
+  } // eraseCookie
+
+  ,
+  getCounter : function(head) {
+    
+    var elements = head.getElementsByTagName("*");
+    if (elements.length == 0) return null;
+    for (var i = 0, e; e = elements[i]; i++) {
+      if (e.className && e.className == "counter")
+        return e;
+    }
+    return null;
+    
+  } // getCounter
+
+  ,
+  getTextContent : function(e) {
+    
+    return e.innerHTML.replace(/<\/?[^>]+>/gi, '');
+    // from prototype.js String#stripTags
+    
+    /*
+    if (!e)
+      return '';
+    if (e.textContent)
+      return e.textContent;
+    if (e.innerText)
+      return e.innerText;
+    var t = FS2.getInnerText(e);
+    return (t) ? t : '';
+    */
+    
+  } // getTextContent
+
+
+  ,
+  //  functions below are moved from myFunctions01a.js
+  //    this ver. 01a02 @ 2006-03-14
+  //    original  01a00 @ 2004-09-16
+  //
+  getNextElement : function(refNode) {
+    
+    var nextNode = refNode.nextSibling;
+    while (nextNode) {
+      if (nextNode.nodeType == 1)
+        return nextNode;  //Node.ELEMENT_NODE
+      
+      nextNode = nextNode.nextSibling;
+    }
+    return null;
+    
+  } // getNextElement
+
+  ,
+  getPrevElement : function(refNode) {
+    
+    var prevNode = refNode.previousSibling;
+    while (prevNode) {
+      if (prevNode.nodeType == 1)
+        return prevNode;  //Node.ELEMENT_NODE
+      
+      prevNode = prevNode.previousSibling;
+    }
+    return null;
+    
+  } // getPrevElement
+
+  ,
+  getAttribute : function(targetElement, targetAttrName) {
+    
+    if (!targetElement || targetElement.nodeType != 1)
+      return false;
+    if (targetAttrName == "class")
+      return targetElement.className;
+    
+    return targetElement.getAttribute(targetAttrName);
+    
+  } // getAttribute
+
+  ,
+  setAttribute : function(targetElement, targetAttrName, targetAttrValue){
+    
+    if (!targetElement || targetElement.nodeType != 1) return false;
+    if (targetAttrName == "class") {
+      targetElement.className = targetAttrValue;
+      if (targetElement.className) return targetElement;
+    }
+    if (targetAttrName == "style") {
+      if (!window.addEventListener) { // for IE
+        targetElement.style.cssText = targetAttrValue;
+        return targetElement;
+      }
+    }
+    targetElement.setAttribute(targetAttrName, targetAttrValue);
+    return targetElement;
+    
+  } // setAttribute
+  
+  ,
+  // function getInnerText below is originaly from ... somewhere _(._.)_
+  //
+  getInnerText : function(refNode){
+    
+    var nodes = refNode.childNodes,
+    innerTextArray = [];
+    if (nodes.length == 0)
+      return null;
+    
+    for (var i = 0, n; n = nodes[i]; i++) {
+      if (n.hasChildNodes()) {
+        innerTextArray.push(FS2.getInnerText(n));
+      } else if (n.nodeType == 3) {  //Node.TEXT_NODE
+        innerTextArray.push(n.nodeValue);
+      } else if (n.alt) {
+        innerTextArray.push("[");
+        innerTextArray.push(n.alt);
+        innerTextArray.push("]");
+      }
+    }
+    var innerText = innerTextArray.join("");
+    return innerText;
+    
+  } // getInnerText
+  
+};
+
+// ---- user functions ----
+
+function makeSwitchesBy(pattern) {
+  
+  if (!pattern) return;
+  
+  var args = new Array();
+  
+  args["re_NoSwitch"] = FS2.getUnfoldPatternRegExp(pattern);
+  args["pattern"] = FS2.getFoldPattern(FS2.getGivenPattern(pattern)) || ".";
+  for (var i = 0; i < scopeIds.length; i++) {
+    args["scopeId"] = scopeIds[i];
+    _appendButtonElementsBy(args);
+  }
+  
+  return true;
+  
+  function _appendButtonElementsBy(args) {
+    
+    var scope = document.getElementById(args["scopeId"]);
+    if (!scope) return;
+    
+    var regExp = new RegExp(args["pattern"], "i");
+    var heads = scope.getElementsByTagName("H2");
+    
+    for (var i = 0, head; head = heads[i]; i++) {
+      if (FS2.hasSwitch(head))
+        continue;
+      if (FS2.isCommentNode(head.firstChild))
+        continue;
+      
+      var t = FS2.getTextContent(head);
+      if (!t)
+        continue;
+      if (_onlyConsistsOfKuuhaku(t))
+        continue;
+      if (!t.match(regExp))
+        continue;
+      if (args["re_NoSwitch"] && t.match(args["re_NoSwitch"]))
+        continue;
+      
+      // make switch  // overwholed 2006-03-21~22
+      var switchElement;
+      if (unfoldMark) switchElement = _appendButtonElement(head);
+      if (useHeadingAsSwitch) {
+        switchElement = head;
+        var anchors = head.getElementsByTagName('a');
+        if (anchors.length > 0) _setDummyTitle(anchors);
+      }
+      
+      switchElement.title = foldTitle;
+      head.onclick = FS2.handleClickOnFoldSwitch;
+      head.className = FS2.UNFOLDED_CLASS;
+      
+    } // for
+    
+    return true;
+    
+    function _onlyConsistsOfKuuhaku(str) {
+      
+      return (str.match(/^[　\s]+$/));
+      
+    } // function _onlyConsistsOfKuuhaku
+    
+    function _appendButtonElement(head) {
+      
+      var switchElement = document.createElement("BUTTON");
+      switchElement.className = "switch";
+      FS2.setAttribute(switchElement, "style", switchStyle);
+      switchElement.innerHTML = foldMark;
+      
+      var label = document.createElement('label');
+      label.className = 'switch-label';
+      FS2.setAttribute(label, "style", labelStyle);
+      label.innerHTML = head.innerHTML;
+      
+      head.innerHTML = '';
+      head.appendChild(switchElement);
+      head.appendChild(label);
+      
+      return switchElement;
+      
+    } // function _appendButtonElement
+    
+    function _setDummyTitle(anchors) {    //+ 2006-03-21 to prevent the title attr popup on a link :(
+      
+      for (var i = 0, anchor; anchor = anchors[i]; i++) {
+        if (anchor.href && !anchor.title)
+          anchor.title = anchor.innerHTML;
+      }
+      
+    } // function _setDummyTitle
+    
+  } // function _appendButtonElements
+  
+} // function makeSwitchesBy
+
+function foldContentsBy(pattern, to_be_continued) {
+
+  if (!pattern && pattern !== "") pattern = '.';
+  
+  if (!FS2.USE_COOKIE) FS2.eraseCookie("pattern2FoldSidebar");
+  
+  var args = new Array();
+  args["cookiedPattern"] = FS2.getCookiedPattern();
+  pattern = FS2.getGivenPattern(pattern);
+  args["re2Fold"] = _getRegExp2Fold(pattern);
+  args["re2Unfold"] = FS2.getUnfoldPatternRegExp(pattern);
+  
+  for (var i = 0; i < scopeIds.length; i++) {
+    args["scopeId"] = scopeIds[i];
+    _switchModesBy(args);
+  }
+  
+  if (!to_be_continued) eraseCookiedKey4NonExistingList();
+  
+  return true;
+  
+  function _switchModesBy(args) {
+    
+    if (!args["scopeId"]) return false;
+    
+    var scope = document.getElementById(args["scopeId"]);
+    if (!scope) 
+      return false;
+
+    var heads = scope.getElementsByTagName("H2");
+	    
+    for (var i = 0, head; head = heads[i]; i++) {
+      if (!FS2.hasSwitch(head))
+        continue;
+      var headText = FS2.getModuleHeadText(head);
+      var t = FS2.escapeRegExpChars(headText);
+      
+	  var action = '';
+      var lastClass = _getLastClassFromCookie(t, args["cookiedPattern"]);
+      if (lastClass){
+        if (head.className == lastClass)
+          continue;
+        action = (lastClass.indexOf("unfolded") > -1) ? "unfold" : "fold";
+      }
+	  else {
+        if (args["re2Fold"] && t.match(args["re2Fold"]))
+		  action = 'fold';
+        if (args["re2Unfold"] && t.match(args["re2Unfold"]))
+          action = 'unfold';
+      }
+	  if (!action) continue;
+      
+	  FS2.switchMode(head, action);
+      
+    } // for loop
+    
+    return true;
+    
+    function _getLastClassFromCookie(t, p){
+      
+      if (!t)
+        return null;
+      p = p || FS2.getCookiedPattern();
+      if (!p)
+        return null;
+      
+      var keys = p.split('|');
+      for (var i = 0, key; key = keys[i]; i++){
+        var folded = (key.charAt(0) != '!');
+        if (!folded)
+          key = key.substring(1);
+        if (key == t)
+          return (folded) ? FS2.FOLDED_CLASS : FS2.UNFOLDED_CLASS;
+      }
+      return null;
+      
+    } // function _getLastClassFromCookie
+    
+  } // function _switchModesBy
+  
+  function _getRegExp2Fold(p){
+    
+    return new RegExp(FS2.getFoldPattern(p), 'i');
+    
+  } // function _getRegExp2Fold
+  
+} // function foldContentsBy
+
+function countItemsBy(pattern) {
+  
+  if (!pattern) return;
+  var reNoCount = _getRegExpNoCount(pattern);
+  pattern = FS2.getFoldPattern(FS2.getGivenPattern(pattern));
+  var regExp = new RegExp(pattern, "i");
+  
+  for (var i = 0; i < scopeIds.length; i++) {
+    var scope = document.getElementById(scopeIds[i]);
+    if (!scope) continue;
+    
+    var heads = scope.getElementsByTagName("H2");
+    for (var j = 0, head; head = heads[j]; j++) {
+      var t = FS2.getModuleHeadText(head);
+      if (!t || !t.match(regExp)) continue;
+      if (reNoCount && t.match(reNoCount)) continue;
+      
+      var n = _getNumOfItems(head);
+      var counter = FS2.getCounter(head);
+      if (counter) {
+        if (_getOldCount(counter) == n) continue;
+      } else {
+        counter = document.createElement("SPAN");
+        counter.className = "counter";
+        FS2.setAttribute(counter, "style", counterStyle);
+      }
+      counter.innerHTML = counterPrefix + n + counterPostfix;
+      head.appendChild(counter);
+    }
+  }
+  
+  function _getRegExpNoCount(pattern){
+    
+    return FS2.getUnfoldPatternRegExp(pattern);
+    
+  } // function _getRegExpNoCount
+  
+  function _getNumOfItems(h2) {
+    
+    var n = 0;
+    var targetElement = FS2.getNextElement(h2);
+    while(targetElement) {
+      if (targetElement.nodeName && targetElement.tagName == "H2")
+        break;
+      if (FS2.hasClassName(targetElement, "module"))
+        break;
+      var LIs = targetElement.getElementsByTagName("li");
+      var dn = LIs.length;
+      var t = FS2.getTextContent(targetElement);
+      if (dn == 0 && countBroadly && t && t.length > 0)
+        dn = 1;
+      n += dn;
+      targetElement = FS2.getNextElement(targetElement);
+    }
+    return n;
+    
+  } // function _getNumOfItems
+  
+  function _getOldCount(counter) {
+  
+    return FS2.getTextContent(counter).match(/\d+/);
+    
+  } // function _getOldCount
+  
+} // function countItemsBy
+
+function eraseCookiedKey4NonExistingList() {  // deprecated ?
+  
+  var T = new Array();
+  for (var i = 0, scopeId; scopeId = scopeIds[i]; i++){
+    var scope = document.getElementById(scopeId);
+    if (!scope)
+      continue;
+    var heads = scope.getElementsByTagName("H2");
+    for (var j = 0, head; head = heads[j]; j++) {
+      if (!FS2.hasSwitch(head))
+        continue;
+      var t = FS2.getModuleHeadText(head);
+      if (t)
+        T.push('^' + FS2.escapeRegExpChars(t) + '$');
+    }
+  }
+  var allTitlePattern = T.join('|');
+  var p = FS2.getCookiedPattern();
+  p = p.replace(/\|\|+/g, '|')
+  var R = new Array();
+  if (p) {
+    var keys = p.split('|');
+    for (var i = 0, key; key = keys[i]; i++){
+      var t = (key.indexOf('!') == 0) ? key.substring(1) : key;
+      if (t && t.match(/^\s+$/)) continue;
+      if (allTitlePattern.indexOf('^' + t + '$') == -1) continue;
+      for (var j = 0, r; r = R[j]; j++) {
+        if (key == r) {
+          key = '';
+          break;
+        }
+      }
+      if (key) R.push(key);
+    }
+  }
+  if (R.length > 0) FS2.setCookiePattern(R.join('|'));
+  
+} // function eraseCookiedKey4NonExistingList
